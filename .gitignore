@@ -5,7 +5,7 @@ build/*
 __pycache__/*
 *.pyc
 .env
-.xlsx
+*.xlsx
 *.pickle
 *.vscode
 *.egg-info/
