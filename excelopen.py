@@ -69,6 +69,20 @@ class ExcelOpenDocument(object):
             assert(not ref), 'Can not use "A1" style cell refernce with column= row='  # noqa: E501
             return self.sheet.cell(row=row, column=column)
 
+
+    def freeze_panes(self, ref="A1"):
+            self.sheet.freeze_panes = ref
+
+    """
+    def freeze_panes(self, ref=None, row=None, column=None):
+        if ref:
+            assert(not row or not column), 'Can not use column= or row= with "A1" style cell refernce'  # noqa: E501
+            self.sheet.freeze_panes(self.sheet[ref])
+        else:
+            assert(not ref), 'Can not use "A1" style cell refernce with column= row='  # noqa: E501
+            self.sheet.freeze_panes(self.sheet.cell(row=row, column=column))
+    """
+
     def font(self, **params):
         return Font(**params)
 
@@ -77,4 +91,16 @@ class ExcelOpenDocument(object):
 
     def set_width(self, column, width):
         self.sheet.column_dimensions[column].width = width
+
+    def rows(self, min_row=1, min_col=1, max_row=None, max_col=None):
+        """iterate over rows"""
+        if max_row is None:
+            max_row = self.max_row()
+        if max_col is None:
+            max_col = self.max_column()
+        return (self.sheet.iter_rows(
+            min_row=min_row,
+            min_col=min_col,
+            max_row=max_row,
+            max_col=max_col))
 
