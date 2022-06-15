@@ -8,7 +8,7 @@ import PySimpleGUI as sg
 import sys
 from decimal import Decimal
 from excelopen import ExcelOpenDocument
-
+from xlsxwriter import Workbook # type: ignore
 
 TITLES = [
     ["Employee Name", 24],
@@ -31,11 +31,11 @@ TASKS = {
 }
 
 TASK_COLUMN = {
-    "Fabrication": 5,
-    "Paint": 6,
-    "Canvas": 7,
-    "Floorboard": 8,
-    "Outfitting": 9,
+    "Fabrication": 4,
+    "Paint": 5,
+    "Canvas": 6,
+    "Floorboard": 7,
+    "Outfitting": 8,
 }
 
 DEPTS = [
@@ -48,7 +48,7 @@ DEPTS = [
 
 def dept_ref(dept, row):
     """convert deept/row to cell address"""
-    return chr(TASK_COLUMN[dept] +64) + str(row)
+    return chr(TASK_COLUMN[dept] +65) + str(row + 1)
 
 def read_sheet(original):
     """read spreadsheet"""
@@ -63,76 +63,69 @@ def read_sheet(original):
         if task.value not in labor[job.value]:
             labor[job.value][task.value] = {}
         labor[job.value][task.value][employee.value] = Decimal(hours.value)
+    xlsx.close()
     return labor
 
-def write_headers(xlsx):
+def write_headers(formats, xlsx):
     """write spreadsheet headrs"""
-    bold = xlsx.font(bold=True)
-    xlsx.freeze_panes("A2")
-    for column, title in enumerate(TITLES, start=1):
-        xlsx.set_width(chr(column + 64), title[1])
-        cell = xlsx.cell(column=column, row=1)
-        cell.font = bold
-        cell.value = title[0]
+    for column, title in enumerate(TITLES):
+        col = chr(column + 65)
+        xlsx.set_column(col + ":" + col, title[1])
+        xlsx.write(0, column, title[0], formats['bold'])
 
-def write_task(xlsx, employees, boat, task_name, task, row):
+def write_task(formats, xlsx, employees, boat, task_name, task, row):
     """write out task of one boat to spreadsheet"""
     hours = Decimal(0.0)
-    start_row = row
+    start_row = row + 1
     for employee in employees:
         hour = employees[employee]
         hours += hour
-        xlsx.cell(row=row, column=1).value = employee
-        xlsx.cell(row=row, column=2).value = boat
-        xlsx.cell(row=row, column=3).value = task_name
-        xlsx.cell(row=row, column=4).value = hour
-        xlsx.cell(row=row, column=4).number_format = "#,##0.00"
+        xlsx.write(row, 0, employee)
+        xlsx.write(row, 1, boat)
+        xlsx.write(row, 2, task_name)
+        xlsx.write(row, 3, hour, formats['decimal'])
         end_row = row
         row +=1
-    text = f"=SUM(D{start_row}:D{end_row})"
-    xlsx.cell(row=end_row, column=TASK_COLUMN[task]).value = text
-    xlsx.cell(row=end_row, column=TASK_COLUMN[task]).number_format = "#,##0.00"
+    text = f"=SUM(D{start_row}:D{end_row + 1})"
+    xlsx.write(end_row, TASK_COLUMN[task], text, formats['decimal'])
     return row
 
-def write_boat(xlsx, boat, boat_name, row):
+def write_boat(formats, xlsx, boat, boat_name, row):
     """write out one boat to spreadsheet"""
     for task in boat:
-        row = write_task(xlsx, boat[task], boat_name, task, TASKS[task], row)
+        row = write_task(formats, xlsx, boat[task], boat_name, task, TASKS[task], row)
     return row
 
-def write_totals(xlsx, row):
+def write_totals(formats, xlsx, row):
     """write out totals on sheet"""
-    bold = xlsx.font(bold=True)
     row -= 1
     for task in DEPTS:
-        text = f"=SUM({dept_ref(task, 2)}:{dept_ref(task, row-1)})"
-        xlsx.cell(row=row, column=TASK_COLUMN[task]).value =  text
-        xlsx.cell(row=row, column=TASK_COLUMN[task]).font =  bold
-        xlsx.cell(row=row, column=TASK_COLUMN[task]).number_format = "#,##0.00"
-    xlsx.cell(row=row, column=4).value = f"=SUM(D2:D{row-1})"
-    xlsx.cell(row=row, column=4).font = bold
-    xlsx.cell(row=row, column=4).number_format = "#,##0.00"
-    # xlsx.set_active_cell(f"A{row}")
+        text = f"=SUM({dept_ref(task, 1)}:{dept_ref(task, row-1)})"
+        xlsx.write(row, TASK_COLUMN[task], text, formats['totals'])
+    xlsx.write(row, 3, f"=SUM(D2:D{row})", formats['totals'])
+    xlsx.freeze_panes(1, 0, row-20, 1)
+    xlsx.set_selection(row, 2, row, 2)
 
 
-def write_boats(xlsx, labor):
+def write_boats(formats, xlsx, labor):
     """write out all boats"""
-    row = 2
+    row = 1
     for boat in labor:
-        if boat == 'total':
-            total = labor[boat]
-            continue
-        row = write_boat(xlsx, labor[boat], boat, row)
+        row = write_boat(formats, xlsx, labor[boat], boat, row)
         row += 1
-    write_totals(xlsx, row)
+    write_totals(formats, xlsx, row)
 
 def write_sheet(file_path, labor):
     """write spreadsheet"""
-    xlsx = ExcelOpenDocument()
-    xlsx.new(file_path)
-    write_headers(xlsx)
-    write_boats(xlsx, labor)
-    xlsx.save()
+    with Workbook(file_path) as workbook:
+        xlsx = workbook.add_worksheet('Labor')
+        formats = {}
+        formats['bold'] = workbook.add_format({'bold': True})
+        formats['decimal'] = workbook.add_format({'num_format': '#,##0.00'})
+        formats['totals'] = workbook.add_format({'bold': True, 'num_format': '#,##0.00'})
+        formats['totals'].set_top(6)
+        write_headers(formats, xlsx)
+        write_boats(formats, xlsx, labor)
 
 def gui(original):
     """build/show gui and handle event loop"""
