@@ -38,25 +38,32 @@ TASK_COLUMN = {
     "Outfitting": 9,
 }
 
+DEPTS = [
+    "Fabrication",
+    "Paint",
+    "Canvas",
+    "Outfitting",
+    "Floorboard",
+]
+
+def dept_ref(dept, row):
+    """convert deept/row to cell address"""
+    return chr(TASK_COLUMN[dept] +64) + str(row)
+
 def read_sheet(original):
     """read spreadsheet"""
     xlsx = ExcelOpenDocument()
     xlsx.open(original)
-    labor = {'total': Decimal(0.0)}
-    # for employee, _, job, task, _, _, hours in xlsx.rows(min_row=2, max_row=32, min_col=3, max_col=9):
+    labor = {}
     for employee, _, job, task, _, _, hours in xlsx.rows(min_row=2, min_col=3, max_col=9):
         if task.value not in TASKS:
             continue
         if job.value not in labor:
-            labor[job.value] = {'total': Decimal(0.0)}
+            labor[job.value] = {}
         if task.value not in labor[job.value]:
-            labor[job.value][task.value] = {'total': Decimal(0.0)}
-        labor[job.value][task.value][employee.value] = hours.value
-        labor[job.value][task.value]['total'] += Decimal(hours.value)
-        labor[job.value]['total'] += Decimal(hours.value)
-        labor['total'] += Decimal(hours.value)
+            labor[job.value][task.value] = {}
+        labor[job.value][task.value][employee.value] = Decimal(hours.value)
     return labor
-
 
 def write_headers(xlsx):
     """write spreadsheet headrs"""
@@ -68,72 +75,56 @@ def write_headers(xlsx):
         cell.font = bold
         cell.value = title[0]
 
-def write_task(xlsx, employees, boat, task_name, task, totals):
+def write_task(xlsx, employees, boat, task_name, task, row):
     """write out task of one boat to spreadsheet"""
     hours = Decimal(0.0)
-    total = Decimal(0.0)
+    start_row = row
     for employee in employees:
         hour = employees[employee]
-        if employee == 'total':
-            total = employees[employee]
-            continue
-        hours += Decimal(hour)
-        totals['Total'] += Decimal(hour)
-        totals['Subtotal'] += Decimal(hour)
-        totals[task] += Decimal(hour)
-        xlsx.cell(row=totals['Row'], column=1).value = employee
-        xlsx.cell(row=totals['Row'], column=2).value = boat
-        xlsx.cell(row=totals['Row'], column=3).value = task_name
-        xlsx.cell(row=totals['Row'], column=4).value = hour
-        xlsx.cell(row=totals['Row'], column=4).number_format = "#,##0.00"
-        totals['Row'] += 1
-        if hours == total:
-            print(f"        {employee:24.24} {hour:8.2f}  {hours:8.2f}")
-        else:
-            print(f"        {employee:24.24} {hour:8.2f}")
-    xlsx.cell(row=totals['Row']-1, column=TASK_COLUMN[task]).value = totals['Subtotal']
-    xlsx.cell(row=totals['Row']-1, column=TASK_COLUMN[task]).number_format = "#,##0.00"
+        hours += hour
+        xlsx.cell(row=row, column=1).value = employee
+        xlsx.cell(row=row, column=2).value = boat
+        xlsx.cell(row=row, column=3).value = task_name
+        xlsx.cell(row=row, column=4).value = hour
+        xlsx.cell(row=row, column=4).number_format = "#,##0.00"
+        end_row = row
+        row +=1
+    text = f"=SUM(D{start_row}:D{end_row})"
+    xlsx.cell(row=end_row, column=TASK_COLUMN[task]).value = text
+    xlsx.cell(row=end_row, column=TASK_COLUMN[task]).number_format = "#,##0.00"
+    return row
 
-
-def write_boat(xlsx, boat, boat_name, totals):
+def write_boat(xlsx, boat, boat_name, row):
     """write out one boat to spreadsheet"""
-    totals['Subtotal'] = Decimal(0.0)
     for task in boat:
-        if task == 'total':
-            continue
-        print(f"    {task}")
-        write_task(xlsx, boat[task], boat_name, task, TASKS[task], totals)
-    print(f"                                                    {totals['Subtotal']:8.2f}")
+        row = write_task(xlsx, boat[task], boat_name, task, TASKS[task], row)
+    return row
 
-def write_totals(xlsx, totals):
+def write_totals(xlsx, row):
     """write out totals on sheet"""
-    for task in ["Fabrication", "Paint", "Canvas", "Outfitting", "Floorboard"]:
-        text = "=SUM(" + chr(TASK_COLUMN[task] +64) + "2:" + chr(TASK_COLUMN[task] +64) + str(totals['Row']-2) + ")"
-        xlsx.cell(row=totals['Row']-1, column=TASK_COLUMN[task]).value =  text # totals['Subtotal']
-        xlsx.cell(row=totals['Row']-1, column=TASK_COLUMN[task]).number_format = "#,##0.00"
-    print(f"     {totals['Total']:8.2f}    {totals['Fabrication']:8.2f}    {totals['Paint']:8.2f}    {totals['Canvas']:8.2f}    {totals['Floorboard']:8.2f}    {totals['Outfitting']:8.2f}")
+    bold = xlsx.font(bold=True)
+    row -= 1
+    for task in DEPTS:
+        text = f"=SUM({dept_ref(task, 2)}:{dept_ref(task, row-1)})"
+        xlsx.cell(row=row, column=TASK_COLUMN[task]).value =  text
+        xlsx.cell(row=row, column=TASK_COLUMN[task]).font =  bold
+        xlsx.cell(row=row, column=TASK_COLUMN[task]).number_format = "#,##0.00"
+    xlsx.cell(row=row, column=4).value = f"=SUM(D2:D{row-1})"
+    xlsx.cell(row=row, column=4).font = bold
+    xlsx.cell(row=row, column=4).number_format = "#,##0.00"
+    # xlsx.set_active_cell(f"A{row}")
+
 
 def write_boats(xlsx, labor):
     """write out all boats"""
-    grand_total = Decimal(0.0)
-    totals = {
-        'Total': Decimal(0.0),
-        'Fabrication': Decimal(0.0),
-        'Canvas': Decimal(0.0),
-        'Paint': Decimal(0.0),
-        'Floorboard': Decimal(0.0),
-        'Outfitting': Decimal(0.0),
-        'Subtotal': Decimal(0.0),
-        'Row': Decimal(2.0),
-    }
+    row = 2
     for boat in labor:
         if boat == 'total':
             total = labor[boat]
             continue
-        print(f"{boat}")
-        write_boat(xlsx, labor[boat], boat, totals)
-        totals['Row'] += 1
-    write_totals(xlsx, totals)
+        row = write_boat(xlsx, labor[boat], boat, row)
+        row += 1
+    write_totals(xlsx, row)
 
 def write_sheet(file_path, labor):
     """write spreadsheet"""
