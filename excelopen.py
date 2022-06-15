@@ -92,6 +92,11 @@ class ExcelOpenDocument(object):
     def set_width(self, column, width):
         self.sheet.column_dimensions[column].width = width
 
+    def set_active_cell(self, ref):
+        self.sheet.sheet_view.selection[0].activeCell = ref
+        self.sheet.sheet_view.selection[0].sqref = ref
+        self.sheet.sheet_view.topLeftCell="A671"
+
     def rows(self, min_row=1, min_col=1, max_row=None, max_col=None):
         """iterate over rows"""
         if max_row is None:
