@@ -1,12 +1,13 @@
 """
-    Oh yes, the classic "Hello World". The problem is that you
-    can do it so many ways using PySimpleGUI
+    Program to convert TimeForce Labor Report as an xlsx file into
+    a cleaner looking xlsx file via a PySimpleGUI
 """
 
 from pathlib import Path
 import PySimpleGUI as sg
 import sys
 from decimal import Decimal
+import threading
 from excelopen import ExcelOpenDocument
 from xlsxwriter import Workbook # type: ignore
 
@@ -48,11 +49,11 @@ DEPTS = [
 
 def is_excel(file_name):
     """convert filename to path if valid excel file"""
-    excel_file = None
+    excel_in = None
     path = Path(file_name)
     if path.is_file() and path.suffix == '.xlsx':
-        excel_file = path
-    return excel_file
+        excel_in = path
+    return excel_in
 
 def dept_ref(dept, row):
     """convert deept/row to cell address"""
@@ -114,7 +115,6 @@ def write_totals(formats, xlsx, row):
     xlsx.freeze_panes(1, 0, row-20, 1)
     xlsx.set_selection(row, 2, row, 2)
 
-
 def write_boats(formats, xlsx, labor):
     """write out all boats"""
     row = 1
@@ -135,7 +135,13 @@ def write_sheet(file_path, labor):
         write_headers(formats, xlsx)
         write_boats(formats, xlsx, labor)
 
-def gui(excel_file):
+def process_sheet(window, excel_in, excel_out):
+    """background thread, overkil at this point"""
+    labor = read_sheet(excel_in)
+    write_sheet(excel_out, labor)
+    window.write_event_value('-FINISHED-', 'Finished')
+
+def gui(excel_in):
     """build/show gui and handle event loop"""
     layout = [
         [sg.Text('Spreadsheet to process:')],
@@ -143,9 +149,12 @@ def gui(excel_file):
     ]
     window = sg.Window('Format TimeForce Labor Report', layout, finalize=True)
 
-    timeout = thread = None
-    if excel_file:
-        window.write_event_value('-READSHEET-', True)
+    timeout = None
+    thread = None
+    excel_out = None
+
+    if excel_in:
+        window.write_event_value('-SAVEFILE-', True)
     else:
         window.write_event_value('-OPENFILE-', True)
     # --------------------- EVENT LOOP ---------------------
@@ -153,40 +162,47 @@ def gui(excel_file):
         event, values = window.read(timeout=timeout)
         if event in (sg.WIN_CLOSED, 'Exit'):
             break
-        elif event == '-READSHEET-':
-            window['-TEXT-'].update(excel_file.name)
         elif event == '-OPENFILE-':
             file_name = sg.popup_get_file(
                 message="Select Labor Spreadsheet",
                 file_types=(('Excel File','*.xlsx'),),
                 no_window=True)
-            excel_file = is_excel(file_name)
-            if excel_file:
-                window.write_event_value('-READSHEET-', True)
+            excel_in = is_excel(file_name)
+            if excel_in:
+                window.write_event_value('-SAVEFILE-', True)
             else:
                 sg.Popup('No spreadsheet to process..........', title='Closing Program', keep_on_top=True)
                 break
-
+        elif event == '-SAVEFILE-':
+            window['-TEXT-'].update(excel_in.name)
+            excel_out = Path(sg.popup_get_file(
+                message="Save Labor Report Spreadsheet",
+                file_types=(('Excel File','*.xlsx'),),
+                save_as=True,
+                no_window=True))
+            if excel_out.suffix == '.xlsx' and excel_in.resolve() != excel_out.resolve():
+                window.write_event_value('-WRITESHEET-', True)
+            else:
+                sg.Popup('Canceled saving spreadsheet.....', title='Closing Program', keep_on_top=True)
+                break
+        elif event == '-WRITESHEET-':
+            thread = threading.Thread(target=process_sheet,
+                                      args=(window, excel_in, excel_out),
+                                      daemon=True)
+            thread.start()
+        elif event == '-FINISHED-':
+            sg.Popup(f'Saved {excel_out.name}', title='File Saved', keep_on_top=True)
+            break
     window.close()
 
 def main():
     """main function show gui"""
     args = sys.argv
+    excel_in = None
     if len(args) == 2:
-        excel_file = is_excel(args[1])
-    gui(excel_file)
+        excel_in = is_excel(args[1])
+    gui(excel_in)
     sys.exit(0)
-
-    """
-    original = Path("May 2022.xlsx")
-    file_path = "test.xlsx"
-    labor = read_sheet(original)
-    write_sheet(file_path, labor)
-    """
-
-        
-
-
 
 
 if __name__ == "__main__":
