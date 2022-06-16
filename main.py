@@ -9,6 +9,7 @@ import sys
 import threading
 import PySimpleGUI as sg
 from xlsxwriter import Workbook # type: ignore
+from xlsxwriter.exceptions import FileCreateError # type: ignore
 from excelopen import ExcelOpenDocument
 
 TITLES = [
@@ -138,8 +139,12 @@ def write_sheet(file_path, labor):
 def process_sheet(window, excel_in, excel_out):
     """background thread, overkil at this point"""
     labor = read_sheet(excel_in)
-    write_sheet(excel_out, labor)
-    window.write_event_value('-FINISHED-', 'Finished')
+    status = f'Saved {excel_out.name}'
+    try:
+        write_sheet(excel_out, labor)
+    except FileCreateError:
+        status = f'Could not write {excel_out.name}'
+    window.write_event_value('-FINISHED-', status)
 
 def gui(excel_in):
     """build/show gui and handle event loop"""
@@ -195,7 +200,7 @@ def gui(excel_in):
                                       daemon=True)
             thread.start()
         if event == '-FINISHED-':
-            sg.Popup(f'Saved {excel_out.name}', title='File Saved', keep_on_top=True)
+            sg.Popup(values['-FINISHED-'], title='Status', keep_on_top=True)
             break
     window.close()
 
