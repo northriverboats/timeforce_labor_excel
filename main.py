@@ -46,6 +46,14 @@ DEPTS = [
     "Floorboard",
 ]
 
+def is_excel(file_name):
+    """convert filename to path if valid excel file"""
+    excel_file = None
+    path = Path(file_name)
+    if path.is_file() and path.suffix == '.xlsx':
+        excel_file = path
+    return excel_file
+
 def dept_ref(dept, row):
     """convert deept/row to cell address"""
     return chr(TASK_COLUMN[dept] +65) + str(row + 1)
@@ -127,33 +135,57 @@ def write_sheet(file_path, labor):
         write_headers(formats, xlsx)
         write_boats(formats, xlsx, labor)
 
-def gui(original):
+def gui(excel_file):
     """build/show gui and handle event loop"""
     layout = [
-        [sg.Text('Spreadsheet to process')],
-        [sg.Text(original.name)],
-        [sg.Push(), sg.Button('Exit')],
+        [sg.Text('Spreadsheet to process:')],
+        [sg.Input('', key='-TEXT-', readonly=True)],
     ]
     window = sg.Window('Format TimeForce Labor Report', layout, finalize=True)
 
     timeout = thread = None
-    window.write_event_value('-READSHEET-', True)
+    if excel_file:
+        window.write_event_value('-READSHEET-', True)
+    else:
+        window.write_event_value('-OPENFILE-', True)
     # --------------------- EVENT LOOP ---------------------
     while True:
         event, values = window.read(timeout=timeout)
         if event in (sg.WIN_CLOSED, 'Exit'):
             break
         elif event == '-READSHEET-':
-            print("This is the dog's bollocks mon")
+            window['-TEXT-'].update(excel_file.name)
+        elif event == '-OPENFILE-':
+            file_name = sg.popup_get_file(
+                message="Select Labor Spreadsheet",
+                file_types=(('Excel File','*.xlsx'),),
+                no_window=True)
+            excel_file = is_excel(file_name)
+            if excel_file:
+                window.write_event_value('-READSHEET-', True)
+            else:
+                sg.Popup('No spreadsheet to process..........', title='Closing Program', keep_on_top=True)
+                break
+
     window.close()
 
 def main():
     """main function show gui"""
+    args = sys.argv
+    if len(args) == 2:
+        excel_file = is_excel(args[1])
+    gui(excel_file)
+    sys.exit(0)
+
+    """
     original = Path("May 2022.xlsx")
     file_path = "test.xlsx"
     labor = read_sheet(original)
     write_sheet(file_path, labor)
-    # gui(original)
+    """
+
+        
+
 
 
 
