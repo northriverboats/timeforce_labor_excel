@@ -3,13 +3,13 @@
     a cleaner looking xlsx file via a PySimpleGUI
 """
 
-from pathlib import Path
-import PySimpleGUI as sg
-import sys
 from decimal import Decimal
+from pathlib import Path
+import sys
 import threading
-from excelopen import ExcelOpenDocument
+import PySimpleGUI as sg
 from xlsxwriter import Workbook # type: ignore
+from excelopen import ExcelOpenDocument
 
 TITLES = [
     ["Employee Name", 24],
@@ -82,7 +82,7 @@ def write_headers(formats, xlsx):
         xlsx.set_column(col + ":" + col, title[1])
         xlsx.write(0, column, title[0], formats['bold'])
 
-def write_task(formats, xlsx, employees, boat, task_name, task, row):
+def write_task(formats, xlsx, employees, boat, task_name, task, row): # pylint: disable=too-many-arguments
     """write out task of one boat to spreadsheet"""
     hours = Decimal(0.0)
     start_row = row + 1
@@ -159,10 +159,10 @@ def gui(excel_in):
         window.write_event_value('-OPENFILE-', True)
     # --------------------- EVENT LOOP ---------------------
     while True:
-        event, values = window.read(timeout=timeout)
+        event, values = window.read(timeout=timeout) # pylint: disable=unused-variable
         if event in (sg.WIN_CLOSED, 'Exit'):
             break
-        elif event == '-OPENFILE-':
+        if event == '-OPENFILE-':
             file_name = sg.popup_get_file(
                 message="Select Labor Spreadsheet",
                 file_types=(('Excel File','*.xlsx'),),
@@ -171,9 +171,11 @@ def gui(excel_in):
             if excel_in:
                 window.write_event_value('-SAVEFILE-', True)
             else:
-                sg.Popup('No spreadsheet to process..........', title='Closing Program', keep_on_top=True)
+                sg.Popup('No spreadsheet to process..........',
+                         title='Closing Program',
+                         keep_on_top=True)
                 break
-        elif event == '-SAVEFILE-':
+        if event == '-SAVEFILE-':
             window['-TEXT-'].update(excel_in.name)
             excel_out = Path(sg.popup_get_file(
                 message="Save Labor Report Spreadsheet",
@@ -183,14 +185,16 @@ def gui(excel_in):
             if excel_out.suffix == '.xlsx' and excel_in.resolve() != excel_out.resolve():
                 window.write_event_value('-WRITESHEET-', True)
             else:
-                sg.Popup('Canceled saving spreadsheet.....', title='Closing Program', keep_on_top=True)
+                sg.Popup('Canceled saving spreadsheet.....',
+                         title='Closing Program',
+                         keep_on_top=True)
                 break
-        elif event == '-WRITESHEET-':
+        if event == '-WRITESHEET-':
             thread = threading.Thread(target=process_sheet,
                                       args=(window, excel_in, excel_out),
                                       daemon=True)
             thread.start()
-        elif event == '-FINISHED-':
+        if event == '-FINISHED-':
             sg.Popup(f'Saved {excel_out.name}', title='File Saved', keep_on_top=True)
             break
     window.close()
